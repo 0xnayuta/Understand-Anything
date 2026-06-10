@@ -251,6 +251,7 @@ curl -fsSL https://raw.githubusercontent.com/Egonex-AI/Understand-Anything/main/
 | Antigravity | ✅ 지원 | `install.sh antigravity` |
 | Gemini CLI | ✅ 지원 | `install.sh gemini` |
 | Pi Agent | ✅ 지원 | `install.sh pi` |
+| oh-my-pi / omp | ✅ 지원 | `install.sh omp` |
 | Vibe CLI | ✅ 지원 | `install.sh vibe` |
 | Hermes | ✅ 지원 | `install.sh hermes` |
 | Cline | ✅ 지원 | `install.sh cline` |
