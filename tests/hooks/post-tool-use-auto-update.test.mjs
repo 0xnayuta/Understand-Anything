@@ -41,13 +41,23 @@ function runHook({
 }
 
 describe('PostToolUse auto-update hook', () => {
-  it('emits the auto-update instruction after a git commit', () => {
+  it('injects the auto-update instruction as PostToolUse additional context', () => {
     const result = runHook();
+    const output = JSON.parse(result.stdout);
 
     expect(result.status).toBe(0);
     expect(result.stderr).toBe('');
-    expect(result.stdout).toContain('[understand-anything] Commit detected');
-    expect(result.stdout).toContain(`${result.pluginRoot}/hooks/auto-update-prompt.md`);
+    expect(output).toEqual({
+      hookSpecificOutput: {
+        hookEventName: 'PostToolUse',
+        additionalContext: expect.stringContaining(
+          '[understand-anything] Commit detected',
+        ),
+      },
+    });
+    expect(output.hookSpecificOutput.additionalContext).toContain(
+      `${result.pluginRoot}/hooks/auto-update-prompt.md`,
+    );
   });
 
   it('stays silent for unrelated Bash commands', () => {

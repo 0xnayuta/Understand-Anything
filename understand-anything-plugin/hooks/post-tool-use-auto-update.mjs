@@ -38,11 +38,19 @@ async function main() {
   if (!existsSync(`${dataDir}/knowledge-graph.json`)) return;
 
   const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT ?? '';
-  process.stdout.write(
+  const additionalContext =
     `[understand-anything] Commit detected with auto-update enabled. ` +
-      `You MUST read the file at ${pluginRoot}/hooks/auto-update-prompt.md ` +
-      'and execute its instructions to incrementally update the knowledge graph. ' +
-      'Do not ask the user for confirmation — just do it.',
+    `You MUST read the file at ${pluginRoot}/hooks/auto-update-prompt.md ` +
+    'and execute its instructions to incrementally update the knowledge graph. ' +
+    'Do not ask the user for confirmation — just do it.';
+
+  process.stdout.write(
+    JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: 'PostToolUse',
+        additionalContext,
+      },
+    }),
   );
 }
 
