@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import ignore from "ignore";
 import { generateStarterIgnoreFile } from "../ignore-generator";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -284,20 +285,86 @@ describe("generateStarterIgnoreFile", () => {
       expect(content).toContain("# **/rails_helper.rb");
     });
 
-    it("includes Swift XCTest / Swift Testing file patterns", () => {
+    it("scopes Swift XCTest patterns to exactly-named test directories", () => {
       const content = generateStarterIgnoreFile(testDir);
       expect(content).toContain("# Swift");
-      // Dominant Apple convention — one <ClassName>Tests.swift per unit.
-      expect(content).toContain("# **/*Tests.swift");
-      // Singular variant seen in some older codebases.
-      expect(content).toContain("# **/*Test.swift");
+      // Exact name, not a *Tests suffix — Contests/ must not be matchable.
+      expect(content).toContain("# **/Tests/**/*.swift");
     });
 
-    it("includes Swift Quick/Nimble BDD *Spec.swift files", () => {
+    it("includes Swift Quick/Nimble BDD spec directories", () => {
       const content = generateStarterIgnoreFile(testDir);
       // Quick is the Swift RSpec-equivalent — dominant in codebases that
       // adopted BDD styling before Swift Testing shipped.
-      expect(content).toContain("# **/*Spec.swift");
+      expect(content).toContain("# **/Specs/**/*.swift");
+    });
+
+    it("suggests Xcode target dirs by real name, only when they exist", () => {
+      mkdirSync(join(testDir, "MyAppTests"), { recursive: true });
+      mkdirSync(join(testDir, "MyAppUITests"), { recursive: true });
+      const content = generateStarterIgnoreFile(testDir);
+      expect(content).toContain("# MyAppTests/");
+      expect(content).toContain("# MyAppUITests/");
+      // Not speculatively globbed for projects that have no such dir.
+      expect(generateStarterIgnoreFile(join(testDir, "nope"))).not.toContain(
+        "MyAppTests/",
+      );
+    });
+
+    it("surfaces a production *tests dir under its real name, not silently", () => {
+      // Contests/ does match the unanchored suffix rule — that is acceptable
+      // only because the user sees this exact line and can leave it commented.
+      mkdirSync(join(testDir, "Contests"), { recursive: true });
+      const content = generateStarterIgnoreFile(testDir);
+      expect(content).toContain("# Contests/");
+    });
+
+    it("keeps production Swift source when the Swift group is uncommented", () => {
+      // These starter lines exist to be uncommented, so assert on real
+      // matcher behaviour rather than on the emitted text alone.
+      const content = generateStarterIgnoreFile(testDir);
+      const swiftPatterns = content
+        .split("\n")
+        .map((l) => l.replace(/^#\s*/, "").trim())
+        .filter((l) => l.endsWith(".swift"));
+      expect(swiftPatterns.length).toBeGreaterThan(0);
+
+      const ig = ignore().add(swiftPatterns);
+      for (const kept of [
+        "Sources/App/Contest.swift",
+        "Sources/App/Latest.swift",
+        "Sources/App/Backtest.swift",
+        "Sources/App/Protest.swift",
+        "Sources/App/Contests.swift",
+        "Sources/App/Inspec.swift",
+        "Sources/Requests/LoginRequest.swift",
+        "Sources/Interests/InterestPicker.swift",
+        // Directory-level collisions the exact-name globs must also avoid.
+        "Sources/Contests/ContestList.swift",
+        "Sources/Protests/ProtestFeed.swift",
+      ]) {
+        expect(ig.ignores(kept), `${kept} must not be ignored`).toBe(false);
+      }
+      for (const dropped of [
+        "Tests/AppTests/AppTests.swift",
+        "Tests/AppTests/Helpers.swift",
+        "Tests/File.swift",
+        "Modules/Feature/Tests/A.swift",
+        "SignalServiceKit/tests/CryptoTest.swift",
+        "Specs/LoginSpec.swift",
+      ]) {
+        expect(ig.ignores(dropped), `${dropped} must be ignored`).toBe(true);
+      }
+    });
+
+    it("does not emit bare Swift file-suffix globs", () => {
+      const content = generateStarterIgnoreFile(testDir);
+      // The runtime matcher is case-insensitive (`ignore` defaults to
+      // ignorecase: true), so these would silently drop production files
+      // named Contest.swift / Latest.swift / Backtest.swift / Inspec.swift.
+      expect(content).not.toContain("# **/*Test.swift");
+      expect(content).not.toContain("# **/*Tests.swift");
+      expect(content).not.toContain("# **/*Spec.swift");
     });
 
     it("groups patterns under the JS / TS sub-header", () => {

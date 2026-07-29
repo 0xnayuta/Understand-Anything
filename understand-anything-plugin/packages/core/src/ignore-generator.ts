@@ -39,14 +39,22 @@ const EXACT_DIR_NAMES = [
 ];
 
 // Directory-name suffixes matched case-insensitively via String.endsWith.
-// Primarily intended for C# / .NET project-suffix conventions like Foo.Tests,
-// Foo.UnitTests, Foo.IntegrationTests, but note the match is unanchored —
-// e.g. a hypothetical `.storybook.tests` would also match. Suggestions stay
-// commented-out so the user reviews before activating.
+// Covers C# / .NET project-suffix conventions (Foo.Tests, Foo.UnitTests,
+// Foo.IntegrationTests) and Xcode target conventions (MyAppTests,
+// MyAppUITests) in one rule — the dotted C# forms all end in "tests", so
+// they need no separate entries.
+//
+// The match is deliberately unanchored, which means a production directory
+// ending in "tests"/"specs" (Contests/, Protests/) also matches. That is
+// safe *here* in a way the equivalent file-glob is not: this list only ever
+// runs against directories that actually exist on disk (see
+// detectDirectories), and the result is emitted commented-out under the
+// directory's real name — so a repo with a genuine Contests/ dir sees a
+// literal `# Contests/` line it can decline to uncomment. A speculative
+// `**/*Tests/**` glob offers the user no such signal.
 const SUFFIX_DIR_GLOBS = [
-  ".tests",
-  ".unittests",
-  ".integrationtests",
+  "tests",
+  "specs",
 ];
 
 // Test file patterns grouped by language. Emitted as commented suggestions
@@ -157,28 +165,43 @@ const TEST_PATTERN_GROUPS: Array<{ label: string; patterns: string[] }> = [
     ],
   },
   {
-    // Swift is the opposite of Ruby: the existing case-insensitive
-    // `tests` exact-dir rule already sweeps up nearly every Swift test
-    // file — SPM funnels everything into `Tests/` by convention, and
-    // even Xcode consumer apps (Signal-iOS) keep their unit tests
-    // under nested `test/`/`tests/` dirs. Measurement across 10 major
-    // Swift repos (Apple stdlib, swift-nio, SPM, Alamofire, Vapor,
-    // realm-swift, TCA, Quick/Nimble, Signal-iOS, swift-snapshot-
-    // testing) put the file-glob contribution at ~1% weighted (max
-    // single-repo hero was Signal-iOS at 1% / −0.07M tok, 31 file
-    // hits). What the file globs still earn is the straggler case:
-    // test files scattered inline inside production modules
-    // (Signal-iOS's SignalServiceKit/Cryptography/CryptographyTests
-    // .swift, SPM's in-source *Tests.swift). No dir rules were added
-    // because the measurement showed both Xcode-style dir-suffix
-    // matching (`*tests/`) and a `uitests` exact rule delivered zero
-    // additional hits across the sample while `*tests/` carried real
-    // false-positive risk (Contests/, Requests/, Interests/).
+    // Swift patterns are scoped to test *directories*, not file
+    // suffixes, because the runtime matcher (the `ignore` package in
+    // ignore-filter.ts) runs with its default `ignorecase: true`. Under
+    // case-insensitive matching a bare `**/*Test.swift` also swallows
+    // production names like Contest.swift, Latest.swift, Backtest.swift
+    // and Protest.swift; `**/*Tests.swift` catches Contests.swift, and
+    // `**/*Spec.swift` catches Inspec.swift. That is not recoverable by
+    // writing the glob more carefully — `ignore` compiles patterns to a
+    // RegExp with the `i` flag, so a `[Tt]` character class buys nothing.
+    // Since these starter lines are meant to be uncommented by users,
+    // silently dropping real source is the worst failure mode available,
+    // so the file-suffix form was abandoned.
+    //
+    // The globs below use *exact* directory names rather than a `*Tests`
+    // suffix, so they carry no false-positive risk at all: Contests/ and
+    // Protests/ do not match. They cover SPM's `Tests/` and Quick's
+    // `Specs/` at any depth, including nested module layouts like
+    // Modules/Feature/Tests/ that `detectDirectories()` cannot see (it
+    // enumerates only direct children of projectRoot).
+    //
+    // Xcode's target-suffix convention (`MyAppTests/`, `MyAppUITests/`)
+    // is deliberately NOT handled here. It is handled by the "tests"
+    // entry in SUFFIX_DIR_GLOBS instead, which only fires for directories
+    // observed on disk and emits them under their real name — see the
+    // note there for why that is the safe place for suffix matching.
+    // The residual gap is a *nested* Xcode-style dir (Modules/Feature/
+    // FeatureTests/), which neither rule reaches. That is an accepted
+    // miss: under-matching costs tokens, over-matching silently drops
+    // source, and only one of those is a correctness bug.
+    //
+    // NOTE: token-savings measurement still to be redone for this
+    // directory-scoped shape — the earlier file-suffix figures do not
+    // carry over and have been removed rather than restated.
     label: "Swift",
     patterns: [
-      "**/*Tests.swift",
-      "**/*Test.swift",
-      "**/*Spec.swift",
+      "**/Tests/**/*.swift",
+      "**/Specs/**/*.swift",
     ],
   },
 ];
